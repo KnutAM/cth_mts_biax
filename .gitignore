@@ -1,0 +1,13 @@
+
+# Python files to ignore
+*__pycache__
+*.pyc
+
+# Test files
+*.coverage
+
+# Build files
+build/
+
+# PyCharm files
+.idea/
