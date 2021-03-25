@@ -1,5 +1,6 @@
 # Code requirements
 numpy >=1.0
+defusedxml >= 0.6
 
 # Documentation
 sphinx>=1.0

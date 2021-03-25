@@ -9,4 +9,5 @@ Header for index page
    
    intro
    raw_data
+   read_variables
    indices_and_tables
