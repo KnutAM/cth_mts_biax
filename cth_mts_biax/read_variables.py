@@ -13,7 +13,6 @@ information in a dictionary format. Two output types are possible:
 
 """
 
-#from xml.dom import minidom
 from defusedxml import minidom
 import numpy as np
 
@@ -67,17 +66,30 @@ def var_list_to_dicts(var_list):
 
 
 def get_variable_list(file):
+    """ Get the Variable list output from the xml-formatted file
+
+    :param file: Path to the xml-formatted file
+    :type file: str, pathlike
+    
+    :returns: A list where each item contains a dictionary describing 
+              the variables written that time the "Save variable to file"
+              function was called in the test program. The keys in the 
+              dictionary are the variable names, and each dict contains
+              tuple with a data list (often a single element) followed
+              by a string describing the unit
+    :rtype: list[ dict ]
+    """
     xml_doc = minidom.parse(file)
     # Get each instance where data has been written to the xml file
     write_instances = xml_doc.getElementsByTagName('ArrayOfVariableData')
     var_list = []
     for write_instance in write_instances:
-        var_list.append(get_dict(write_instance))
+        var_list.append(_get_dict(write_instance))
 
     return var_list
 
 
-def get_dict(write_instance):
+def _get_dict(write_instance):
     written_variables = write_instance.getElementsByTagName('VariableData')
     var_dict = {}
     for written_variable in written_variables:
@@ -86,24 +98,24 @@ def get_dict(write_instance):
             unit = written_variable.getElementsByTagName('Unit')[0].firstChild.data
         except IndexError:
             unit = ''
-        values = get_values(written_variable.getElementsByTagName('Values')[0])
+        values = _get_values(written_variable.getElementsByTagName('Values')[0])
         var_dict[name] = (values, unit)
 
     return var_dict
 
 
-def get_values(values_element):
+def _get_values(values_element):
     value_elements = values_element.getElementsByTagName('Value')
     values = []
     for value_element in value_elements:
         values.append(value_element.firstChild.data)
 
-    convert_values(values)
+    _convert_values(values)
 
     return values
 
 
-def convert_values(values):
+def _convert_values(values):
 
     try:
         tmp = [int(v) for v in values]
