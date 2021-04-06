@@ -4,7 +4,7 @@
 import numpy as np
 
     
-def read(name, min_num_columns=9):
+def read(name, min_num_columns=9, num_rows=0):
     """Read the raw experiment data file into a numpy array and include additional information from the header.
 
     :param name: The path to the file to be read
@@ -13,6 +13,9 @@ def read(name, min_num_columns=9):
     :param min_num_columns: The minimum number of floating numbers that a line should be converted to in order to be
                             considered a data line
     :type min_num_columns: int
+
+    :param num_rows: How many rows to read. If 0, read all
+    :type num_rows: int
 
     :returns: A np.array with test data and an information dictionary containing the test date (key='date')
     :rtype: tuple( np.array, dict )
@@ -26,6 +29,8 @@ def read(name, min_num_columns=9):
     with open(name, 'r') as fid:
         headers = []
         data = []
+        num_rows = num_rows if num_rows != 0 else np.inf
+
         for line in fid:
             split_line = line.split()
             try:
@@ -38,8 +43,12 @@ def read(name, min_num_columns=9):
             else:
                 headers.append(line)
 
+        row_nr = 1
         for line in fid:
             data.append([float(item) for item in line.split()])
+            row_nr += 1
+            if row_nr > num_rows:
+                break
 
     info = {'date': 'not_found'}
     for hl in headers:
