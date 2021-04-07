@@ -59,7 +59,7 @@ def read(name, min_num_columns=9, num_rows=0):
     return np.array(data), info
 
 
-def compensate(data, cols, od):
+def compensate(data, cols, od, tstr_sign=0):
     """ Compensate data wrt. scaling, stiffness and cross-talk
     :param data: The data matrix to be compensated (as returned from :py:func:`read`)
     :param cols: Dictionary giving the column number in data. Required keys are (with expected unit in parenthesis)
@@ -79,8 +79,12 @@ def compensate(data, cols, od):
 
     :param od: The outer diameter of the test bar [mm]
 
-    :returns: The compensated data array and an information string about the compensations
-    :rtype: tuple( np.array, str )
+    :param tstr_sign: The sign with which to scale the torsional strain in relation to the torque.
+                      -1 if extensometer text upside down, -1 otherwise).
+                      If 0 (default), try to automatically detect by correlation with the torque.
+
+    :returns: The compensated data array, an information string about the compensations and the tstr_sign used
+    :rtype: tuple( np.array, str, int)
     """
 
     # Compensation values from Meyer et al. (2018) [https://doi.org/10.1016/j.ijsolstr.2017.10.007]
@@ -91,11 +95,24 @@ def compensate(data, cols, od):
     # Other parameters
     ext_cal_dia = 10.0          # mm        The diameter for which the extensometer was calibrated.
 
+    # Automatically determine sign of shear strain scaling
+    if tstr_sign == 0 and 'tstr' in cols:
+        # Remove last 10 % when looking max min to avoid evaluating after failure.
+        n = int(data.shape[0]*0.9)
+        # Find max and min torque
+        i_max = np.argmax(data[:n, cols['torq']])
+        i_min = np.argmin(data[:n, cols['torq']])
+        # Get sign of inclination for torque versus shear strain. If positive maintain sign versus torque.
+        tsgn = np.sign((data[i_max, cols['torq']] - data[i_min, cols['torq']]) /
+                       (data[i_max, cols['tstr']] - data[i_min, cols['tstr']]))
+    else:
+        tsgn = tstr_sign
+
     # Scale channels
     scale_factors = {'forc': 1000.0,    # Convert from kN to N
                      'torq': -1000.0,   # Convert from kNmm to Nmm and switch sign
                      'rota': -1.0,      # Reverse rotation direction
-                     'tstr': -1.0*ext_cal_dia/od,   # Reverse strain and compensate for different outer diameter.
+                     'tstr': -tsgn*ext_cal_dia/od,   # Reverse strain and compensate for different outer diameter.
                      'tcnt': 2,         # Counters in half step, double to make integers
                      'acnt': 2,
                      }
@@ -118,10 +135,11 @@ def compensate(data, cols, od):
     data[:, cols['torq']] -= data[:, cols['forc']]*torque_per_force
 
     info = (''
-            + 'All rotation (torq,rota,tstr) reversed from machine\n'
+            + 'Rotation (torq,rota) reversed from machine\n'
+            + '' if (tstr_sign == 0 or 'tstr' not in cols) else ('tstr_sign = ' + str(tsgn) + '\n')
             + stiffness_comp  # Only add if disp and rota part of data
             + 'Cross talk compensation:\n'
             + ' torq = torq - forc * ({:0.4f} Nmm/N)\n'.format(torque_per_force)
             + 'Reference: https://doi.org/10.1016/j.ijsolstr.2017.10.007\n')
 
-    return data, info
+    return data, info, tsgn
