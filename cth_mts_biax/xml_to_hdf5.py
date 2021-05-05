@@ -4,22 +4,26 @@ internally to store the testing data. That file can be found in the test folder:
 <TestName>/test_runs/<TestRunName>/Data/daqTaskActivity1.xml
 """
 import sys
+import os
 
 import numpy as np
 import h5py
 
 
 def main(argv):
-    if len(argv) < 1:
-        print("A file name (excluding suffix) must be given)")
+    if len(argv) < 2:
+        print("1) A file name (excluding suffix) must be given)")
+        print("2) The outer diameter (in mm) must be given")
         return
     file = argv[1]
+    outer_diameter = float(argv[2])
     rdata, runits = get_data(file)
     data, units, dtypes = reduce_data(rdata, runits)
-    save_data(file, data, units, dtypes)
+    comp_data, comp_units, comp_attributes = compensate(data, units, outer_diameter)
+    save_data(file, comp_data, comp_units, dtypes, global_attributes=comp_attributes)
 
 
-def save_data(file, data, units, dtypes=None):
+def save_data(file, data, units, dtypes=None, global_attributes=None):
     """Save data to hdf5 file for later use
 
     :param file: Path to hdf file to save data to, excluding .hdf suffix
@@ -34,6 +38,9 @@ def save_data(file, data, units, dtypes=None):
     :param dtypes: Dictionary with the data types with which the data should be saved
     :type dtypes: dict
 
+    :param global_attributes: Attributes to add the the top level
+    :type global_attributes: dict
+
     """
     dtypes_ = {} if dtypes is None else dtypes
 
@@ -44,18 +51,33 @@ def save_data(file, data, units, dtypes=None):
             else:
                 ds = hdf.create_dataset(name, data=data[name])
             ds.attrs["unit"] = units[name]
+        if global_attributes is not None:
+            for key in global_attributes:
+                hdf.attrs[key] = global_attributes[key]
 
 
-def get_data(file):
+def get_data(file, max_lines=None):
     """ Get data from the biaxial machine's raw xml file.
 
     :param file: Path to xml file excluding .xml suffix
     :type file: str
 
+    :param max_lines: Maximum number of lines to read from xml file.
+                      Defaults to None, meaning read all lines
+    :type max_lines: int
+
     :returns: Dictionary with key based on names in the xml file and content as numpy arrays (float64)
               Dictionary with key based on names in the xml file and content strings with unit description
     :rtype: dict, dict
     """
+    if max_lines is None:
+        size_per_line = 341.57                       # Bytes/line
+        file_size = os.path.getsize(file + '.xml')   # Bytes
+        estimated_lines = file_size / size_per_line  # line
+        max_lines = np.inf
+    else:
+        estimated_lines = max_lines
+
     with open(file + '.xml', 'r') as xml:
         # Read until signal description list starts
         for line in xml:
@@ -81,9 +103,14 @@ def get_data(file):
             elif line.strip() == "<Scan>":
                 name_ind = 0
                 row_count += 1
+                if row_count >= max_lines:
+                    break
                 if row_count % 100000 == 0:
-                    print("{:0.1e}".format(row_count))
-
+                    progress = 100 * row_count / estimated_lines
+                    sys.stdout.write("\rEstimated progress: {:5.1f} %".format(progress))
+                    sys.stdout.flush()
+    print('\n')
+    print("Total number of lines: ", row_count)
     for name in names:
         data[name] = np.array(data[name])
 
@@ -222,6 +249,104 @@ def reduce_data(raw_data, raw_units, save_disp=False, join_cnt=True,
 def str2ascii(raw_str):
     # Convert a string to ascii by removing non-ascii characters
     return raw_str.encode("ascii", "ignore").decode()
+
+
+def compensate(data, units, outer_diameter, tstr_sign=0):
+    """ Compensate data wrt. units, stiffness and cross-talk.
+
+    :param data: The data dictionary to be compensated (as returned from :py:func:`reduce_data`)
+
+    :param units: Dictionary of units (as returned from :py:func:`reduce_data`)
+
+    :param outer_diameter: The outer diameter of the test bar [mm]
+
+    :param tstr_sign: The sign with which to scale the torsional strain in relation to the torque.
+                      -1 if extensometer text upside down, 1 otherwise).
+                      If 0 (default), try to automatically detect by correlation with the torque.
+
+    :returns: The compensated data dictionary, adjusted units, attributes describing compensation
+    :rtype: (dict, dict, dict)
+    """
+    # The units with which the data will be output
+    fixed_units = {'forc': 'N', 'torq': 'Nmm', 'disp': 'mm', 'rota': 'rad', 'astr': '-', 'tstr': 'rad', 'time': 's'}
+
+    # Compensation values from Meyer et al. (2018) [https://doi.org/10.1016/j.ijsolstr.2017.10.007]
+    k_axial = 198.71e3          # N/mm      Machine axial stiffness, to compensate disp values
+    k_torsional = 25920e3       # Nmm/rad   Machine torsional stiffness, to compensate rota values
+    torque_per_force = 0.0901   # Nmm/N     Cross talk force to torque, note sign change due to reversed rotation axis.
+
+    # Other parameters
+    ext_cal_dia = 10.0          # mm        The diameter for which the extensometer was calibrated.
+
+    # Automatically determine sign of shear strain scaling
+    if tstr_sign == 0 and 'tstr' in data:
+        # Remove last 10 % when looking max min to avoid evaluating after failure.
+        n = int(data['tstr'].shape[0]*0.9)
+        # Find max and min torque
+        i_max = np.argmax(data['torq'][:n])
+        i_min = np.argmin(data['torq'][:n])
+        # Get sign of inclination for torque versus shear strain. If positive maintain sign versus torque.
+        tsgn = np.sign((data['torq'][i_max] - data['torq'][i_min]) /
+                       (data['tstr'][i_max] - data['tstr'][i_min]))
+    else:
+        tsgn = tstr_sign
+
+    # Scale channels
+    # If KeyError is thrown below, it is suitable to add more units in the following dictionary
+    scale_factors = {'forc': {'N': 1.0, 'kN': 1000.0},
+                     'torq': {'Nm': -1000.0, 'Nmm': -1.0, 'kNm': -1.0e6, 'kNmm': -1.0e3},  # "-" due to machine
+                     'disp': {'m': 1000.0, 'mm': 1.0},
+                     'rota': {'rad': -1.0},                                                # "-" due to machine
+                     'astr': {length_measure + '/' + length_measure: 1.0
+                              for length_measure in ['mm', 'm', 'inch']},    # e.g. m/m
+                     'tstr': {'rad': -tsgn * ext_cal_dia / outer_diameter},                # "-" due to machine
+                     'time': {'sec': 1.0, 's': 1.0},
+                     }
+    for key in scale_factors:
+        if key in data:
+            try:
+                sfac = scale_factors[key][units[key]]
+            except KeyError as ke:
+                if not units[key] in scale_factors[key]:
+                    print("Unknown unit {:s} for variable {:s}".format(units[key], key))
+                    print("Available units are: {:s}".format(",".join(['"' + u + '"' for u in scale_factors[key]])))
+                    print("Consider adding additional unit conversions to 'scale_factors' (see above in the code)")
+                raise ke
+            data[key] = sfac * data[key]
+
+    # Compensate for machine stiffness
+    if 'disp' in data:
+        data['disp'] -= data['forc']/k_axial
+    if 'rota' in data:
+        data['rota'] -= data['torq']/k_torsional
+    stiffness_comp = ''
+    if any([c in data for c in ['disp', 'rota']]):
+        stiffness_comp = 'Machine stiffness compensation:\n'
+        stiffness_comp += ' disp = disp - forc * ({:0.6e} mm/N)\n'.format(1/k_axial) if 'disp' in data else ''
+        stiffness_comp += ' rota = rota - torq * ({:0.6e} rad/Nmm)\n'.format(1/k_torsional) if 'rota' in data else ''
+
+    # Compensate for cross talk
+    data['torq'] -= data['forc']*torque_per_force
+
+    # Write modified units
+    new_units = {key: (fixed_units[key] if key in fixed_units else units[key]) for key in data}
+
+    info = (''
+            + 'Rotation (torq,rota) reversed from machine\n'
+            + '' if (tstr_sign == 0 or 'tstr' not in data) else ('tstr_sign = ' + str(tsgn) + '\n')
+            + stiffness_comp  # Only add if disp and rota part of data
+            + 'Cross talk compensation:\n'
+            + ' torq = torq - forc * ({:0.4f} Nmm/N)\n'.format(torque_per_force)
+            + 'Reference: https://doi.org/10.1016/j.ijsolstr.2017.10.007\n')
+
+    attributes = {'info': info,
+                  'cross_talk_torque_per_force': torque_per_force,
+                  'axial_stiffness': k_axial,
+                  'torsional_stiffness': k_torsional,
+                  'tstr_sign': tsgn,
+                  }
+
+    return data, new_units, attributes
 
 
 if __name__ == '__main__':
