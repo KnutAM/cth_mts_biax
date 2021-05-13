@@ -110,9 +110,13 @@ def get_data(file, max_lines=None):
                     sys.stdout.write("\rEstimated progress: {:5.1f} %".format(progress))
                     sys.stdout.flush()
     print('\n')
+    if name_ind != len(names):
+        row_count -= 1
+        print("Last data point not completely read, is the file complete?")
+
     print("Total number of lines: ", row_count)
     for name in names:
-        data[name] = np.array(data[name])
+        data[name] = np.array(data[name])[:(row_count+1)]
 
     return data, units
 
