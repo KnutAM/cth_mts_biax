@@ -70,14 +70,15 @@ def get_data(file, max_lines=None):
               Dictionary with key based on names in the xml file and content strings with unit description
     :rtype: dict, dict
     """
+    fname = file if file.endswith('.xml') else file + '.xml'
     if max_lines is None:
         size_per_line = 341.57                       # Bytes/line
-        file_size = os.path.getsize(file + '.xml')   # Bytes
+        file_size = os.path.getsize(fname)           # Bytes
         estimated_lines = file_size / size_per_line  # line
         max_lines = np.inf
     else:
         estimated_lines = max_lines
-    fname = file if file.endswith('.xml') else file + '.xml'
+    
     with open(fname, 'r') as xml:
         # Read until signal description list starts
         for line in xml:
