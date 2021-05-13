@@ -79,7 +79,8 @@ def get_variable_list(file):
               by a string describing the unit
     :rtype: list[ dict ]
     """
-    xml_doc = minidom.parse(file)
+    xml_file = file if file.endswith('.xml') else file + '.xml'
+    xml_doc = minidom.parse(xml_file)
     # Get each instance where data has been written to the xml file
     write_instances = xml_doc.getElementsByTagName('ArrayOfVariableData')
     var_list = []

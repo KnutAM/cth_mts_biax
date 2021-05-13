@@ -43,8 +43,8 @@ def save_data(file, data, units, dtypes=None, global_attributes=None):
 
     """
     dtypes_ = {} if dtypes is None else dtypes
-
-    with h5py.File(file + '.hdf', 'w') as hdf:
+    fname = file if file.endswith('.hdf') else file + '.hdf'
+    with h5py.File(fname, 'w') as hdf:
         for name in data:
             if name in dtypes_:
                 ds = hdf.create_dataset(name, data=data[name], dtype=dtypes_[name])
@@ -59,7 +59,7 @@ def save_data(file, data, units, dtypes=None, global_attributes=None):
 def get_data(file, max_lines=None):
     """ Get data from the biaxial machine's raw xml file.
 
-    :param file: Path to xml file excluding .xml suffix
+    :param file: Path to xml file
     :type file: str
 
     :param max_lines: Maximum number of lines to read from xml file.
@@ -77,8 +77,8 @@ def get_data(file, max_lines=None):
         max_lines = np.inf
     else:
         estimated_lines = max_lines
-
-    with open(file + '.xml', 'r') as xml:
+    fname = file if file.endswith('.xml') else file + '.xml'
+    with open(fname, 'r') as xml:
         # Read until signal description list starts
         for line in xml:
             if line.strip() == "<Signals>":
