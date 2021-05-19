@@ -78,7 +78,7 @@ def get_data(file, max_lines=None):
         max_lines = np.inf
     else:
         estimated_lines = max_lines
-    
+
     with open(fname, 'r') as xml:
         # Read until signal description list starts
         for line in xml:
@@ -112,12 +112,12 @@ def get_data(file, max_lines=None):
                     sys.stdout.flush()
     print('\n')
     if name_ind != len(names):
-        row_count -= 1
         print("Last data point not completely read, is the file complete?")
 
+    row_count = np.min([len(data[name]) for name in names])
     print("Total number of lines: ", row_count)
     for name in names:
-        data[name] = np.array(data[name])[:(row_count+1)]
+        data[name] = np.array(data[name])[:row_count]
 
     return data, units
 
@@ -155,7 +155,7 @@ def get_data_value(line, dtype):
     return dtype(value)
 
 
-def reduce_data(raw_data, raw_units, save_disp=False, join_cnt=True,
+def reduce_data(raw_data, raw_units, save_disp=False, use_tcnt=False,
                 sensor_dtype=np.float32, time_accuracy=1.e-4, cnt_tol=0.1):
     """ Reduce the amount of data stored by
 
@@ -174,8 +174,8 @@ def reduce_data(raw_data, raw_units, save_disp=False, join_cnt=True,
     :param save_disp: Should displacements and rotations be saved? Defaults to False
     :type save_disp: bool
 
-    :param join_cnt: Should counters be joined/merged? Defaults to True
-    :type join_cnt: bool
+    :param use_tcnt: Should the torsional counter be included as well?, Defaults to False
+    :type use_tcnt: bool
 
     :param sensor_dtype: Datatype for sensor values (load,strain and disp/rota)
     :type sensor_dtype: type
@@ -219,23 +219,24 @@ def reduce_data(raw_data, raw_units, save_disp=False, join_cnt=True,
                 units[dkey] = str2ascii(raw_units[disp_keys[dkey]])
 
     # Save counter information
-    cnt_keys = {"acnt": "Axial Segment Count",
-                "tcnt": "Torsional Segment Count"}
+    # Want a vector that returns the index when we change ?cnt by giving 2x the value we change to
+    # 2x because half counters are used as well.
+    cnt_keys = {"acnt": "Axial Segment Count"}
+    if use_tcnt:
+        cnt_keys["tcnt"] = "Torsional Segment Count"
 
-    cnt = 0
     for ckey in cnt_keys:
-        if cnt_keys[ckey] in raw_data:
-            if join_cnt:
-                cnt += raw_data[cnt_keys[ckey]][:]
-            else:
-                data[ckey] = np.where(raw_data[cnt_keys[ckey]][1:] > (raw_data[cnt_keys[ckey]][:-1] + cnt_tol))[0]
-                dtypes[ckey] = data[ckey].dtype
-                units[ckey] = "-"
-
-    if join_cnt:
-        data["cnt"] = np.where(cnt[1:] > (cnt[:-1] + cnt_tol))[0]
-        dtypes["cnt"] = data["cnt"].dtype
-        units["cnt"] = "-"
+        raw_cnt = raw_data[cnt_keys[ckey]]
+        c_changes = np.where(raw_cnt[1:] > (raw_cnt[:-1] + cnt_tol))[0]
+        cnt = [0]
+        for c_change in c_changes:
+            change_to = int(2*raw_cnt[c_change+1])
+            while len(cnt) < (change_to-1):
+                cnt.append(cnt[-1])
+            cnt.append(c_change+1)
+        data[ckey] = np.array(cnt, dtype=np.uint32)     # OK up to 4e9 datapoints
+        dtypes[ckey] = np.uint32
+        units[ckey] = "-"
 
     # Save time
     trkey = "Running Time"
