@@ -99,7 +99,11 @@ def get_data(file, max_lines=None):
         for line in xml:
             if line.strip().startswith("<Value>"):
                 name = names[name_ind]
-                data[name].append(get_data_value(line, np.float64))
+                try:
+                    data[name].append(get_data_value(line, np.float64))
+                except ValueError:
+                    print("Could not convert a data value, could be due to partial file?")
+                    break
                 name_ind += 1
             elif line.strip() == "<Scan>":
                 name_ind = 0
