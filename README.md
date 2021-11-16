@@ -3,6 +3,6 @@
 
 ## Installation
 
-Download repository using git: ``git clone git@github.com:KnutAM/cth_mtx_biax.git``
+Download repository using git: ``git clone git@github.com:KnutAM/cth_mts_biax.git``
 
 In cmd or shell with the current working directory the same as for this readme: `pip install .`
