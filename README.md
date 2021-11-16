@@ -7,6 +7,7 @@ Download repository using git: ``git clone git@github.com:KnutAM/cth_mts_biax.gi
 
 
 In cmd or shell with the current working directory the same as for this readme: 
-`conda activate`
-`conda install sphinx_rtd_theme`
-`pip install .`
+
+* `conda activate`
+* `conda install sphinx_rtd_theme`
+* `pip install .`
