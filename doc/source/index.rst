@@ -10,4 +10,5 @@ Header for index page
    intro
    raw_data
    read_variables
+   xml_to_hdf5
    indices_and_tables

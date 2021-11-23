@@ -1,7 +1,7 @@
 """ When very large experimental files are generated from the biaxial testing machine, it is unable to export as raw
 data. To alleviate this issue, the present module can read the raw xml file that the biaxial testing machine uses
 internally to store the testing data. That file can be found in the test folder: e.g.
-<TestName>/test_runs/<TestRunName>/Data/daqTaskActivity1.xml
+``<TestName>/test_runs/<TestRunName>/Data/daqTaskActivity1.xml``
 """
 import sys
 import os
@@ -128,7 +128,8 @@ def get_data(file, max_lines=None):
 
 def get_name_and_unit(line):
     """ Get the name and unit of the given signal description. An example line is
-    "    <Signal Name="Running Time" InternalName="Running Time" Dimension="time" Unit="sec" />\n"
+
+    ``<Signal Name="Running Time" InternalName="Running Time" Dimension="time" Unit="sec" />\\n``
 
     :param line: The line in the xml file
     :type line: str
@@ -144,7 +145,8 @@ def get_name_and_unit(line):
 
 def get_data_value(line, dtype):
     """ Get the data value from the line, an example line is
-    "    <Value>8.14404296875</Value>\n"
+
+    ``<Value>8.14404296875</Value>\\n``
 
     :param line: The line in the xml file
     :type line: str
@@ -154,6 +156,7 @@ def get_data_value(line, dtype):
 
     :returns: The value in the requested data type
     :rtype: dtype
+
     """
     value = line.split("<Value>")[-1].split("</Value>")[0]
     return dtype(value)
