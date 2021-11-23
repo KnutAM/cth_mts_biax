@@ -1,5 +1,6 @@
 # Readme for end users
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation Status](https://readthedocs.org/projects/cth-mts-biax/badge/?version=latest)](https://cth-mts-biax.readthedocs.io/en/latest/?badge=latest)
 
 ## Installation
 **Prerequisites:** You need to have python installed with conda (anaconda), and be able to run conda and python from your shell.
