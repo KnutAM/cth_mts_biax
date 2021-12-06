@@ -61,7 +61,9 @@ def read(name, min_num_columns=9, num_rows=0):
 
 def compensate(data, cols, od, tstr_sign=0):
     """ Compensate data wrt. scaling, stiffness and cross-talk
+    
     :param data: The data matrix to be compensated (as returned from :py:func:`read`)
+    
     :param cols: Dictionary giving the column number in data. Required keys are (with expected unit in parenthesis)
 
                  - ``forc``: Axial force [kN]
