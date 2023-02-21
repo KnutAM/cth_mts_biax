@@ -54,17 +54,49 @@ def save_data(file, data, units, dtypes=None, global_attributes=None):
         if global_attributes is not None:
             for key in global_attributes:
                 hdf.attrs[key] = global_attributes[key]
+    return fname 
 
 
-def get_data(file, max_lines=None):
+
+def join_data(file, subfiles):
+    fname = file if file.endswith('.hdf') else file + '.hdf'
+    with h5py.File(subfiles[0], "r") as first:
+        with h5py.File(fname, 'w') as hdf:
+            for name in first:
+                data = first[name][:]
+                for subfile in subfiles[1:]:
+                    with h5py.File(subfile, "r") as sub:
+                        if name=="acnt" or name=="tcnt":
+                            subv = sub[name][:]
+                            data = np.append(data, subv + (data[-1]-subv[0]))
+                        else:
+                            data = np.append(data, sub[name][:])
+                ds = hdf.create_dataset(name, data=data, dtype=np.dtype(data[0]))
+            for key in first.attrs:
+                hdf.attrs[key] = first.attrs[key]
+    return fname
+
+
+def estimate_lines(file):
+    fname = file if file.endswith('.xml') else file + '.xml'
+    size_per_line = 341.57                       # Bytes/line
+    file_size = os.path.getsize(fname)           # Bytes
+    estimated_lines = file_size / size_per_line  # line
+    return estimated_lines
+
+
+def get_data(file, max_lines=None, start_line=0):
     """ Get data from the biaxial machine's raw xml file.
 
     :param file: Path to xml file
     :type file: str
 
-    :param max_lines: Maximum number of lines to read from xml file.
-                      Defaults to None, meaning read all lines
+    :param max_lines: Max "line number" (i.e. datapoints) to read from xml file.
+                      Defaults to None, meaning read until the end
     :type max_lines: int
+    
+    :param start_line: Which line (time step number) to start at. Useful to get data in parts for large files. 
+    :type start_line: int 
 
     :returns: Dictionary with key based on names in the xml file and content as numpy arrays (float64)
               Dictionary with key based on names in the xml file and content strings with unit description
@@ -72,9 +104,7 @@ def get_data(file, max_lines=None):
     """
     fname = file if file.endswith('.xml') else file + '.xml'
     if max_lines is None:
-        size_per_line = 341.57                       # Bytes/line
-        file_size = os.path.getsize(fname)           # Bytes
-        estimated_lines = file_size / size_per_line  # line
+        estimated_lines = estimate_lines(fname)
         max_lines = np.inf
     else:
         estimated_lines = max_lines
@@ -96,6 +126,13 @@ def get_data(file, max_lines=None):
         data = {name: [] for name in names}
         name_ind = 0    # Not actually needed
         row_count = 0
+        if start_line>0:
+            for line in xml:
+                if line.strip() == "<Scan>":
+                    row_count += 1
+                    if row_count >= start_line:
+                        break
+                        
         for line in xml:
             if line.strip().startswith("<Value>"):
                 name = names[name_ind]
@@ -111,11 +148,11 @@ def get_data(file, max_lines=None):
                 if row_count >= max_lines:
                     break
                 if row_count % 100000 == 0:
-                    progress = 100 * row_count / estimated_lines
+                    progress = 100 * (row_count-start_line) / (estimated_lines-start_line)
                     sys.stdout.write("\rEstimated progress: {:5.1f} %".format(progress))
                     sys.stdout.flush()
     print('\n')
-    if name_ind != len(names):
+    if name_ind != len(names) or name_ind != 0:
         print("Last data point not completely read, is the file complete?")
 
     row_count = np.min([len(data[name]) for name in names])
@@ -237,7 +274,7 @@ def reduce_data(raw_data, raw_units, save_disp=False, use_tcnt=False,
         c_changes = np.where(raw_cnt[1:] > (raw_cnt[:-1] + cnt_tol))[0]
         cnt = [0]
         for c_change in c_changes:
-            change_to = int(2*raw_cnt[c_change+1])
+            change_to = int(2*(raw_cnt[c_change+1]-raw_cnt[0]))
             while len(cnt) < (change_to-1):
                 cnt.append(cnt[-1])
             cnt.append(c_change+1)
